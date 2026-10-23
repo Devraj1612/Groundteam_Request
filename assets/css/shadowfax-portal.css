@@ -26,12 +26,12 @@ body {
 
 .watermark {
   position: fixed;
-  right: -72px;
+  right: -52px;
   bottom: 8px;
   z-index: 0;
   width: min(38vw,460px);
   height: auto;
-  opacity: .045;
+  opacity: .065;
   filter: grayscale(1);
   pointer-events: none;
   transform: rotate(-12deg);
@@ -52,7 +52,7 @@ header {
 }
 
 header img {
-  height: 48px;
+  height: 58px;
   width: auto;
   object-fit: contain;
 }
@@ -460,6 +460,10 @@ tbody tr:last-child td {
   margin: 5px 0 4px;
   font-size: 22px;
 }
+.analysis-card .dash-heading h2 {
+  margin: 5px 0 4px;
+  font-size: 22px;
+}
 .analysis-summary {
   display: grid;
   grid-template-columns: minmax(150px,.7fr) minmax(0,2fr);
@@ -488,6 +492,72 @@ tbody tr:last-child td {
   display: grid;
   grid-template-columns: repeat(4,minmax(0,1fr));
   gap: 10px;
+}
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+.chart-card {
+  min-width: 0;
+  border: 1px solid var(--b);
+  border-radius: 12px;
+  background: #fff;
+  padding: 18px;
+}
+.chart-card h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.chart-card>p {
+  margin: 0;
+  color: var(--m);
+  font-size: 12px;
+}
+.chart-rows {
+  display: grid;
+  gap: 13px;
+  margin-top: 19px;
+}
+.chart-row {
+  display: grid;
+  grid-template-columns: minmax(95px,1fr) minmax(70px,1.35fr) 28px;
+  align-items: center;
+  gap: 10px;
+}
+.chart-label {
+  overflow: hidden;
+  color: #45574f;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chart-track {
+  display: block;
+  height: 11px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf3f0;
+}
+.chart-fill {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg,var(--g),#42b487);
+  transition: width .2s ease;
+}
+.chart-value {
+  color: var(--t);
+  font-size: 12px;
+  text-align: right;
+}
+.analysis-breakdown {
+  margin-top: 22px;
+}
+.analysis-breakdown .dash-heading {
+  margin-bottom: 10px;
 }
 .period-switch {
   display: flex;
@@ -700,6 +770,9 @@ a {
     margin-top: 8px;
   }
   .analysis-summary {
+    grid-template-columns: 1fr;
+  }
+  .chart-grid {
     grid-template-columns: 1fr;
   }
   .analysis-types {

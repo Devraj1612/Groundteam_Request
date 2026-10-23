@@ -104,7 +104,7 @@ function formView(t){
 /* ---------- Admin ---------- */
 async function adminLoad(){S.data=await api('adminData',S.u,S.p);adminView()}
 function adminView(){
- const tabs=[['ov','Overview'],['rq','All Requests'],['hb','Cities & Hubs']];
+ const tabs=[['ov','Overview'],['an','Report'],['rq','All Requests'],['hb','Cities & Hubs']];
  app.innerHTML=`<div class="tabs">${tabs.map(([k,n])=>`<button class="${S.tab===k?'on':''}" data-k="${k}">${n}</button>`).join('')}
  <span id="refreshStatus" class="refresh-status" role="status" aria-live="polite"></span>
  <button class="o" id="rf" style="margin-left:auto">↻ Refresh</button></div><div id="pane"></div>`;
@@ -122,7 +122,7 @@ function adminView(){
    status.textContent='Refresh failed: '+msg(x);
   }
  };
- ({ov:overview,rq:requests,hb:hubsPane})[S.tab]();
+ ({ov:overview,an:analysis,rq:requests,hb:hubsPane})[S.tab]();
 }
 function tally(keyFn,data=S.data){const m={};data.forEach(r=>{const k=keyFn(r),id=k.join('|');(m[id]=m[id]||{k,n:{},tot:0});m[id].n[r.t]=(m[id].n[r.t]||0)+1;m[id].tot++});return Object.values(m)}
 function analysisRange(){
@@ -137,22 +137,12 @@ function analysisRange(){
  return {start:date,end:date,label:'Current day · '+date}
 }
 function overview(){
- const {start,end,label}=analysisRange();
- const periodData=S.data.filter(r=>r.date>=start&&r.date<=end);
  const cnt=t=>S.data.filter(r=>r.t===t).length;
  const th=TYPES.map(t=>`<th>${t}</th>`).join(''),cells=r=>TYPES.map(t=>`<td>${r.n[t]||0}</td>`).join('');
  const city=tally(r=>[r.city]).sort((a,b)=>b.tot-a.tot);
  const storeCityOptions=[...new Set(S.data.map(r=>r.city).filter(Boolean))].sort();
  const renderStoreRows=()=>tally(r=>[r.city,r.store]).filter(r=>!S.storeCity||r.k[0]===S.storeCity).sort((a,b)=>b.tot-a.tot);
- const analysisTypes=TYPES.map(t=>`<div class="analysis-type"><b>${periodData.filter(r=>r.t===t).length}</b><span>${t}</span></div>`).join('');
- const analysisCity=tally(r=>[r.city],periodData).sort((a,b)=>b.tot-a.tot);
- $('#pane').innerHTML=`<section class="card analysis-card"><div class="dash-heading"><div><span class="section-kicker">REQUEST TRENDS</span><h3>Analysis</h3><p>${esc(label)} · all request types</p></div>
- <div class="period-switch" role="group" aria-label="Analysis period">
- ${[['today','Today'],['yesterday','D-1'],['week','This week']].map(([k,n])=>`<button class="${S.analysis===k?'on':''}" data-period="${k}">${n}</button>`).join('')}</div></div>
- <div class="analysis-summary"><div class="analysis-total"><b>${periodData.length}</b><span>Requests in period</span></div><div class="analysis-types">${analysisTypes}</div></div>
- <div class="tw"><table><thead><tr><th>City</th>${th}<th>Total</th></tr></thead><tbody>
- ${analysisCity.map(r=>`<tr><td class="city-cell">${esc(r.k[0])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="6">No requests for this period</td></tr>'}</tbody></table></div></section>
- <div class="stats"><div class="stat"><b>${S.data.length}</b><span>All-time requests</span></div>
+ $('#pane').innerHTML=`<div class="stats"><div class="stat"><b>${S.data.length}</b><span>All-time requests</span></div>
  ${TYPES.map(t=>`<div class="stat"><b>${cnt(t)}</b><span>${t}</span></div>`).join('')}</div>
  <section class="card table-card"><div class="dash-heading"><div><h3>City-wise requests received</h3><p>Request volume grouped by city and request type</p></div></div>
  <div class="tw"><table><thead><tr><th>City</th>${th}<th>Total</th></tr></thead><tbody>
@@ -163,7 +153,33 @@ function overview(){
  const renderStoreTable=()=>{$('#storeTableBody').innerHTML=renderStoreRows().map(r=>`<tr><td>${esc(r.k[0])}</td><td class="city-cell">${esc(r.k[1])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="7">No requests for this city</td></tr>'};
  $('#storeCity').onchange=e=>{S.storeCity=e.target.value;renderStoreTable()};
  renderStoreTable();
- $('#pane').querySelectorAll('[data-period]').forEach(b=>b.onclick=()=>{S.analysis=b.dataset.period;overview()});
+}
+function analysis(){
+ const {start,end,label}=analysisRange();
+ const periodData=S.data.filter(r=>r.date>=start&&r.date<=end);
+ const typeCounts=TYPES.map(t=>({label:t,value:periodData.filter(r=>r.t===t).length}));
+ const cities=tally(r=>[r.city],periodData).filter(r=>r.k[0]).sort((a,b)=>b.tot-a.tot);
+ const shownCities=cities.slice(0,8).map(r=>({label:r.k[0],value:r.tot}));
+ const chartRows=items=>{
+  const max=Math.max(0,...items.map(item=>item.value));
+  return items.map(item=>`<div class="chart-row"><span class="chart-label">${esc(item.label)}</span>
+   <span class="chart-track"><span class="chart-fill" style="width:${max?item.value/max*100:0}%"></span></span>
+   <b class="chart-value">${item.value}</b></div>`).join('')||'<p class="table-empty">No requests for this period</p>';
+ };
+ const th=TYPES.map(t=>`<th>${t}</th>`).join(''),cells=r=>TYPES.map(t=>`<td>${r.n[t]||0}</td>`).join('');
+ const analysisCity=tally(r=>[r.city],periodData).sort((a,b)=>b.tot-a.tot);
+ const analysisTypes=typeCounts.map(({label,value})=>`<div class="analysis-type"><b>${value}</b><span>${esc(label)}</span></div>`).join('');
+ $('#pane').innerHTML=`<section class="card analysis-card"><div class="dash-heading"><div><span class="section-kicker">REQUEST TRENDS</span><h2>Analysis</h2><p>${esc(label)} · all request types</p></div>
+ <div class="period-switch" role="group" aria-label="Analysis period">
+ ${[['today','Today'],['yesterday','D-1'],['week','This week']].map(([k,n])=>`<button class="${S.analysis===k?'on':''}" data-period="${k}">${n}</button>`).join('')}</div></div>
+ <div class="analysis-summary"><div class="analysis-total"><b>${periodData.length}</b><span>Requests in period</span></div><div class="analysis-types">${analysisTypes}</div></div>
+ <div class="chart-grid">
+ <section class="chart-card"><h3>Requests by type</h3><p>Volume for each request type in the selected period</p><div class="chart-rows">${chartRows(typeCounts)}</div></section>
+ <section class="chart-card"><h3>Requests by city</h3><p>${cities.length>8?'Top 8 cities by request volume':'Request volume by city'}</p><div class="chart-rows">${chartRows(shownCities)}</div></section></div>
+ <section class="analysis-breakdown"><div class="dash-heading"><div><h3>City breakdown</h3><p>Requests by city and request type</p></div></div>
+ <div class="tw"><table><thead><tr><th>City</th>${th}<th>Total</th></tr></thead><tbody>
+ ${analysisCity.map(r=>`<tr><td class="city-cell">${esc(r.k[0])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="6">No requests for this period</td></tr>'}</tbody></table></div></section></section>`;
+ $('#pane').querySelectorAll('[data-period]').forEach(b=>b.onclick=()=>{S.analysis=b.dataset.period;analysis()});
 }
 function requests(){
  const cities=[...new Set(S.data.map(r=>r.city))].sort();
