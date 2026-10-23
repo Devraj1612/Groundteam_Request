@@ -3,7 +3,7 @@ const watermark=document.querySelector('header img').cloneNode();
 watermark.className='watermark';watermark.alt='';watermark.setAttribute('aria-hidden','true');document.body.append(watermark);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* >>> PASTE your Apps Script Web App URL (ends with /exec) between the quotes <<< */
-const API_URL='https://script.google.com/macros/s/AKfycbw4MODM7fum_PfhwgChNiVUAGjTychbJqacyEzVuVczXSlU-ObYJ9q9jCBwtX4_oSbvbw/exec';
+const API_URL='https://script.google.com/macros/s/AKfycbxks8iyXGEflkpHSEm3O1y1Pw3voBX-T_vPArknwGBLaxKbJjqMSz7kK5vaaT0noq-eXA/exec';
 const api=async(fn,...a)=>{
  if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(API_URL))throw new Error('API_URL is not set in this HTML file');
  const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fn,args:a})});
@@ -55,8 +55,8 @@ function loginView(){
   try{const u=$('#u').value.trim(),p=$('#p').value,r=await api('login',u,p);
    if(!r){$('#e').textContent='Invalid ID or password';b.disabled=false;return}
    Object.assign(S,{u,p,role:r});S.hubs=mergeHubs(await api('getHubs',u,p));
-   $('#hr').innerHTML=`<span>${r==='admin'?'Admin · Control Tower':'Ground Team'}</span><button class="o" onclick="location.reload()">Logout</button>`;
-   r==='admin'?await adminLoad():userView();
+   $('#hr').innerHTML=`<span>${r==='admin'?'Admin · Control Tower':r==='viewer'?'Admin · View only':'Ground Team'}</span><button class="o" onclick="location.reload()">Logout</button>`;
+   r==='admin'||r==='viewer'?await adminLoad():userView();
   }catch(x){$('#e').innerHTML=msg(x);b.disabled=false}};
  $('#go').onclick=go;$('#p').onkeydown=e=>{if(e.key==='Enter')go()};
 }
@@ -189,10 +189,10 @@ function requests(){
  <input id="fq" placeholder="Search order ID / store / TL" value="${esc(S.f.q)}"></div><div class="tw" id="tb"></div></div>`;
  const draw=()=>{const q=S.f.q.toLowerCase();
   const rows=S.data.filter(r=>(!S.f.t||r.t===S.f.t)&&(!S.f.c||r.city===S.f.c)&&(!q||[r.orderId,r.store,r.tl,r.rider].join(' ').toLowerCase().includes(q))).reverse();
-  $('#tb').innerHTML=`<p class="mut">${rows.length} request(s)</p><table><tr><th>Type</th><th>Date</th><th>City</th><th>TL</th><th>Store</th><th>Order ID</th><th>Reason / Rider · Bags</th><th>Photo</th><th></th></tr>
+  $('#tb').innerHTML=`<p class="mut">${rows.length} request(s)</p><table><tr><th>Type</th><th>Date</th><th>City</th><th>TL</th><th>Store</th><th>Order ID</th><th>Reason / Rider · Bags</th><th>Photo</th>${S.role==='admin'?'<th></th>':''}</tr>
   ${rows.map((r,i)=>`<tr><td>${r.t}</td><td>${esc(r.date)}</td><td>${esc(r.city)}</td><td>${esc(r.tl||'-')}</td><td>${esc(r.store)}</td><td>${esc(r.orderId)}</td>
   <td>${r.t==='Bulk Order'?esc(r.rider)+' · '+esc(r.bags)+' bags':esc(r.reason)}</td>
-  <td>${r.photo?`<a href="${esc(r.photo)}" target="_blank">View</a>`:'-'}</td><td><button class="d" data-i="${S.data.indexOf(r)}">Delete</button></td></tr>`).join('')}</table>`;
+  <td>${r.photo?`<a href="${esc(r.photo)}" target="_blank" rel="noopener">View</a>`:'-'}</td>${S.role==='admin'?`<td><button class="d" data-i="${S.data.indexOf(r)}">Delete</button></td>`:''}</tr>`).join('')}</table>`;
   $('#tb').querySelectorAll('.d').forEach(b=>b.onclick=async()=>{const r=S.data[b.dataset.i];
    if(!confirm(`Delete ${r.t} request for Order ${r.orderId}? This also removes the row from the sheet.`))return;
    b.disabled=true;try{await api('deleteRequest',S.u,S.p,r.t,r.row,r.orderId);await adminLoad()}catch(x){alert(msg(x));b.disabled=false}})};
@@ -202,13 +202,14 @@ function requests(){
 function hubsPane(){
  const cities=Object.keys(S.hubs).sort();
  const total=cities.reduce((a,c)=>a+S.hubs[c].length,0);
- $('#pane').innerHTML=`<div class="hub-layout"><section class="card hub-form"><h3>Add City / Hub</h3>
+ $('#pane').innerHTML=`<div class="hub-layout ${S.role==='admin'?'':'hub-readonly'}">${S.role==='admin'?`<section class="card hub-form"><h3>Add City / Hub</h3>
  <label for="nc">City Name</label><input id="nc" list="cl" placeholder="Existing or new city"><datalist id="cl">${cities.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
  <label for="nh">Hub Name</label><input id="nh" placeholder="e.g. AMD_Motera_ANow_TEA2">
- <div class="err" id="e"></div><button class="add-button" id="ah">Add</button></section>
+ <div class="err" id="e"></div><button class="add-button" id="ah">Add</button></section>`:''}
  <section class="card hub-directory"><div class="hub-directory-head"><h3>Cities &amp; hubs</h3><span class="hub-count">${cities.length} cities · ${total} hubs</span></div>
  <div class="hub-list">${cities.map(c=>`<details class="hub-item"><summary>${esc(c)} <span>(${S.hubs[c].length})</span></summary>
  <div class="hub-names">${S.hubs[c].map(h=>`<span class="hub-name">${esc(h)}</span>`).join('')}</div></details>`).join('')}</div></section></div>`;
+ if(S.role!=='admin')return;
  $('#ah').onclick=async()=>{const b=$('#ah');b.disabled=true;$('#e').textContent='';
   try{S.hubs=mergeHubs(await api('addHub',S.u,S.p,$('#nc').value,$('#nh').value));hubsPane()}catch(x){$('#e').innerHTML=msg(x);b.disabled=false}};
   }

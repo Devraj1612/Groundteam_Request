@@ -608,6 +608,9 @@ tbody tr:last-child td {
   gap: 20px;
   align-items: stretch;
 }
+.hub-layout.hub-readonly {
+  grid-template-columns: minmax(0,1fr);
+}
 .hub-form {
   align-self: start;
 }

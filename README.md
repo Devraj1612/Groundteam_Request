@@ -20,7 +20,8 @@ GT_Request/
 
 ## Features
 
-- Sign in users as a ground team member or administrator.
+- Sign in users as a ground team member, administrator, or read-only admin
+  viewer configured by the Apps Script backend.
 - Submit Order Cancellation, Manual Mark Deliver, Manual Mark Undelivered,
   and Bulk Order requests.
 - Select a city and store/hub for a request.
@@ -51,6 +52,12 @@ administrator data, request deletion, and hub creation. The Apps Script
 deployment must implement those operations and enforce authentication and
 authorization on the server. Do not treat frontend role checks as a security
 boundary.
+
+For a read-only admin account, configure `VIEWER_LOGIN_ID` and
+`VIEWER_LOGIN_PASSWORD` as Apps Script Script Properties, return the `viewer`
+role from `login`, allow that role to call `adminData`, and reject viewer calls
+to all write operations. The frontend hides add/delete controls for viewers,
+but the backend must enforce the same restrictions.
 
 ## Run locally
 
