@@ -24,9 +24,12 @@ GT_Request/
 - Submit Order Cancellation, Manual Mark Deliver, Manual Mark Undelivered,
   and Bulk Order requests.
 - Select a city and store/hub for a request.
-- Attach an optional photo to regular requests; Bulk Order requests require a
-  photo. Attachments must be smaller than 8 MB.
-- View request totals and city/store summaries in the administrator overview.
+- Attach an optional photo to Order Cancellation requests. Manual Mark Deliver,
+  Manual Mark Undelivered, and Bulk Order requests require a photo. Attachments
+  must be smaller than 8 MB.
+- View current-day, D-1, and week-to-date analysis alongside all-time request
+  totals and city/store summaries in the administrator overview.
+- Filter the store-wise request summary by city.
 - Filter and search requests, delete requests, and add cities or hubs.
 
 ## Requirements

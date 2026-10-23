@@ -35,16 +35,22 @@ const mergeHubs=remote=>{
  });
  return hubs;
 };
-const S={u:'',p:'',role:'',hubs:{},data:[],tab:'ov',f:{t:'',c:'',q:''}};
-const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const S={u:'',p:'',role:'',hubs:{},data:[],tab:'ov',analysis:'today',storeCity:'',f:{t:'',c:'',q:''}};
+const dateString=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const today=()=>dateString(new Date());
+const dateOffset=days=>{const d=new Date();d.setDate(d.getDate()+days);return dateString(d)};
 const msg=e=>esc((e&&e.message||String(e)).replace(/^Error:\s*/,''));
 
 function loginView(){
  $('#hr').innerHTML='';
- app.innerHTML=`<div class="card login"><h2>Welcome back</h2><p class="login-intro">Sign in to manage Shadowfax operations requests.</p>
- <label>Login ID</label><input id="u" type="email" autocomplete="username">
- <label>Password</label><input id="p" type="password" autocomplete="current-password">
- <div class="err" id="e"></div><button id="go" style="width:100%;margin-top:8px">Login</button></div>`;
+ app.innerHTML=`<div class="login-wrap"><section class="login-banner"><span class="login-kicker">SHADOWFAX · OPERATIONS</span>
+ <h1>Every request,<br>moving forward.</h1><p>A clearer way to manage ground operations requests and stay on top of the day.</p>
+ <div class="login-badge"><span class="login-badge-dot"></span> Ground operations portal</div></section>
+ <div class="card login"><div class="login-mark">SF <span>PORTAL</span></div><h2>Welcome back</h2><p class="login-intro">Sign in to continue to your workspace.</p>
+ <label for="u">Login ID</label><input id="u" type="email" autocomplete="username" placeholder="name@company.com">
+ <label for="p">Password</label><input id="p" type="password" autocomplete="current-password" placeholder="Enter your password">
+ <div class="err" id="e" role="alert"></div><button id="go" style="width:100%;margin-top:8px">Sign in <span aria-hidden="true">→</span></button>
+ <p class="login-footnote">Secure access for authorized team members</p></div></div>`;
  const go=async()=>{const b=$('#go');b.disabled=true;$('#e').textContent='';
   try{const u=$('#u').value.trim(),p=$('#p').value,r=await api('login',u,p);
    if(!r){$('#e').textContent='Invalid ID or password';b.disabled=false;return}
@@ -62,7 +68,7 @@ function userView(note){
  app.querySelectorAll('.type').forEach(b=>b.onclick=()=>formView(b.dataset.t));
 }
 function formView(t){
- const bulk=t==='Bulk Order',cities=Object.keys(S.hubs).sort();
+ const bulk=t==='Bulk Order',photoRequired=bulk||t==='Manual Mark Deliver'||t==='Manual Mark Undelivered',cities=Object.keys(S.hubs).sort();
  app.innerHTML=`<div class="card"><h2>${t}</h2><div class="grid">
  <div><label>Date</label><input id="date" type="date" value="${today()}"></div>
  <div><label>City Name</label><select id="city"><option value="">Select city</option>${cities.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>
@@ -74,7 +80,7 @@ function formView(t){
  :`<div><label>Request</label><input value="${t}" readonly></div>`}
  </div>
  ${bulk?'':'<label>Reason</label><textarea id="reason" rows="3"></textarea>'}
- <label>Photo attachment${bulk?'':' (optional)'}</label><input id="file" type="file" accept="image/*">
+ <label for="file">Photo attachment${photoRequired?' (required)':' (optional)'}</label><input id="file" type="file" accept="image/*" ${photoRequired?'required':''}>
  <div class="err" id="e"></div>
  <div style="display:flex;gap:10px;margin-top:10px"><button id="sub">Submit</button><button class="o" id="bk">Back</button></div></div>`;
  $('#bk').onclick=()=>userView();
@@ -86,7 +92,7 @@ function formView(t){
   const need=bulk?['date','city','store','orderId','rider','bags']:['date','city','tl','store','orderId','reason'];
   if(need.some(k=>!d[k]))return err.textContent='Please fill all required fields';
   const f=$('#file').files[0];
-  if(bulk&&!f)return err.textContent='Photo attachment is required';
+  if(photoRequired&&!f)return err.textContent='Photo attachment is required';
   if(f&&f.size>8e6)return err.textContent='Photo must be under 8 MB';
   const b=$('#sub');b.disabled=true;b.textContent='Submitting…';
   try{let file=null;
@@ -100,24 +106,64 @@ async function adminLoad(){S.data=await api('adminData',S.u,S.p);adminView()}
 function adminView(){
  const tabs=[['ov','Overview'],['rq','All Requests'],['hb','Cities & Hubs']];
  app.innerHTML=`<div class="tabs">${tabs.map(([k,n])=>`<button class="${S.tab===k?'on':''}" data-k="${k}">${n}</button>`).join('')}
+ <span id="refreshStatus" class="refresh-status" role="status" aria-live="polite"></span>
  <button class="o" id="rf" style="margin-left:auto">↻ Refresh</button></div><div id="pane"></div>`;
  app.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{S.tab=b.dataset.k;adminView()});
- $('#rf').onclick=async()=>{try{S.hubs=mergeHubs(await api('getHubs',S.u,S.p));await adminLoad()}catch(x){alert(msg(x))}};
+ $('#rf').onclick=async()=>{
+  const b=$('#rf'),status=$('#refreshStatus');
+  b.disabled=true;b.textContent='Refreshing…';status.textContent='';
+  try{
+   const data=await api('adminData',S.u,S.p);
+   if(S.tab==='hb')S.hubs=mergeHubs(await api('getHubs',S.u,S.p));
+   S.data=data;adminView();
+   $('#refreshStatus').textContent='Updated just now';
+  }catch(x){
+   b.disabled=false;b.textContent='↻ Refresh';
+   status.textContent='Refresh failed: '+msg(x);
+  }
+ };
  ({ov:overview,rq:requests,hb:hubsPane})[S.tab]();
 }
-function tally(keyFn){const m={};S.data.forEach(r=>{const k=keyFn(r);(m[k.join('|')]=m[k.join('|')]||{k,n:{},tot:0});m[k.join('|')].n[r.t]=(m[k.join('|')].n[r.t]||0)+1;m[k.join('|')].tot++});return Object.values(m)}
+function tally(keyFn,data=S.data){const m={};data.forEach(r=>{const k=keyFn(r),id=k.join('|');(m[id]=m[id]||{k,n:{},tot:0});m[id].n[r.t]=(m[id].n[r.t]||0)+1;m[id].tot++});return Object.values(m)}
+function analysisRange(){
+ const date=today();
+ if(S.analysis==='yesterday'){const d=dateOffset(-1);return {start:d,end:d,label:'D-1 · '+d}}
+ if(S.analysis==='week'){
+  const now=new Date(),mondayOffset=now.getDay()===0?-6:1-now.getDay();
+  now.setDate(now.getDate()+mondayOffset);
+  const start=dateString(now);
+  return {start,end:date,label:'This week · '+start+' to '+date}
+ }
+ return {start:date,end:date,label:'Current day · '+date}
+}
 function overview(){
+ const {start,end,label}=analysisRange();
+ const periodData=S.data.filter(r=>r.date>=start&&r.date<=end);
  const cnt=t=>S.data.filter(r=>r.t===t).length;
  const th=TYPES.map(t=>`<th>${t}</th>`).join(''),cells=r=>TYPES.map(t=>`<td>${r.n[t]||0}</td>`).join('');
- const city=tally(r=>[r.city]).sort((a,b)=>b.tot-a.tot),store=tally(r=>[r.city,r.store]).sort((a,b)=>b.tot-a.tot);
- $('#pane').innerHTML=`<div class="stats"><div class="stat"><b>${S.data.length}</b><span>Total requests</span></div>
+ const city=tally(r=>[r.city]).sort((a,b)=>b.tot-a.tot);
+ const storeCityOptions=[...new Set(S.data.map(r=>r.city).filter(Boolean))].sort();
+ const renderStoreRows=()=>tally(r=>[r.city,r.store]).filter(r=>!S.storeCity||r.k[0]===S.storeCity).sort((a,b)=>b.tot-a.tot);
+ const analysisTypes=TYPES.map(t=>`<div class="analysis-type"><b>${periodData.filter(r=>r.t===t).length}</b><span>${t}</span></div>`).join('');
+ const analysisCity=tally(r=>[r.city],periodData).sort((a,b)=>b.tot-a.tot);
+ $('#pane').innerHTML=`<section class="card analysis-card"><div class="dash-heading"><div><span class="section-kicker">REQUEST TRENDS</span><h3>Analysis</h3><p>${esc(label)} · all request types</p></div>
+ <div class="period-switch" role="group" aria-label="Analysis period">
+ ${[['today','Today'],['yesterday','D-1'],['week','This week']].map(([k,n])=>`<button class="${S.analysis===k?'on':''}" data-period="${k}">${n}</button>`).join('')}</div></div>
+ <div class="analysis-summary"><div class="analysis-total"><b>${periodData.length}</b><span>Requests in period</span></div><div class="analysis-types">${analysisTypes}</div></div>
+ <div class="tw"><table><thead><tr><th>City</th>${th}<th>Total</th></tr></thead><tbody>
+ ${analysisCity.map(r=>`<tr><td class="city-cell">${esc(r.k[0])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="6">No requests for this period</td></tr>'}</tbody></table></div></section>
+ <div class="stats"><div class="stat"><b>${S.data.length}</b><span>All-time requests</span></div>
  ${TYPES.map(t=>`<div class="stat"><b>${cnt(t)}</b><span>${t}</span></div>`).join('')}</div>
  <section class="card table-card"><div class="dash-heading"><div><h3>City-wise requests received</h3><p>Request volume grouped by city and request type</p></div></div>
  <div class="tw"><table><thead><tr><th>City</th>${th}<th>Total</th></tr></thead><tbody>
  ${city.map(r=>`<tr><td class="city-cell">${esc(r.k[0])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="6">No requests yet</td></tr>'}</tbody></table></div></section>
- <section class="card table-card"><div class="dash-heading"><div><h3>Store-wise requests received</h3><p>Request volume grouped by store location</p></div></div>
- <div class="tw"><table><thead><tr><th>City</th><th>Store</th>${th}<th>Total</th></tr></thead><tbody>
- ${store.map(r=>`<tr><td>${esc(r.k[0])}</td><td class="city-cell">${esc(r.k[1])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="7">No requests yet</td></tr>'}</tbody></table></div></section>`;
+ <section class="card table-card"><div class="dash-heading"><div><h3>Store-wise requests received</h3><p>Request volume grouped by store location</p></div>
+ <label class="city-filter" for="storeCity">City<select id="storeCity"><option value="">All cities</option>${storeCityOptions.map(c=>`<option value="${esc(c)}" ${S.storeCity===c?'selected':''}>${esc(c)}</option>`).join('')}</select></label></div>
+ <div class="tw"><table><thead><tr><th>City</th><th>Store</th>${th}<th>Total</th></tr></thead><tbody id="storeTableBody"></tbody></table></div></section>`;
+ const renderStoreTable=()=>{$('#storeTableBody').innerHTML=renderStoreRows().map(r=>`<tr><td>${esc(r.k[0])}</td><td class="city-cell">${esc(r.k[1])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="7">No requests for this city</td></tr>'};
+ $('#storeCity').onchange=e=>{S.storeCity=e.target.value;renderStoreTable()};
+ renderStoreTable();
+ $('#pane').querySelectorAll('[data-period]').forEach(b=>b.onclick=()=>{S.analysis=b.dataset.period;overview()});
 }
 function requests(){
  const cities=[...new Set(S.data.map(r=>r.city))].sort();
