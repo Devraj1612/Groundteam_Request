@@ -1,5 +1,11 @@
 const $=s=>document.querySelector(s),app=$('#app');
-const watermark=document.querySelector('header img').cloneNode();
+const logo=document.querySelector('header img');
+const favicon=document.createElement('link');
+favicon.rel='icon';
+favicon.type='image/png';
+favicon.href='assets/img/company-favicon.png?v=2';
+document.head.append(favicon);
+const watermark=logo.cloneNode();
 watermark.className='watermark';watermark.alt='';watermark.setAttribute('aria-hidden','true');document.body.append(watermark);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* >>> PASTE your Apps Script Web App URL (ends with /exec) between the quotes <<< */
