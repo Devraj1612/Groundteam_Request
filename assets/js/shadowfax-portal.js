@@ -39,7 +39,8 @@ const dateString=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'
 const today=()=>dateString(new Date());
 const dateOffset=days=>{const d=new Date();d.setDate(d.getDate()+days);return dateString(d)};
 const S={u:'',p:'',role:'',hubs:{},data:[],tab:'an',analysis:'today',customStart:dateOffset(-6),customEnd:today(),storeCity:'',f:{t:'',c:'',q:''}};
-let autoRefreshTimer=null,refreshInProgress=false;
+let autoRefreshTimer=null,countdownTimer=null,nextRefreshAt=0,refreshInProgress=false;
+const refreshInterval=10*60*1000;
 const msg=e=>esc((e&&e.message||String(e)).replace(/^Error:\s*/,''));
 
 function loginView(){
@@ -107,8 +108,23 @@ function formView(t){
 /* ---------- Admin ---------- */
 async function adminLoad(){S.data=await api('adminData',S.u,S.p);adminView()}
 function startAutoRefresh(){
- if(autoRefreshTimer)clearInterval(autoRefreshTimer);
- autoRefreshTimer=setInterval(refreshAdmin,10*60*1000);
+ if(countdownTimer)clearInterval(countdownTimer);
+ scheduleNextRefresh();
+ countdownTimer=setInterval(updateRefreshCountdown,1000);
+}
+function scheduleNextRefresh(){
+ if(autoRefreshTimer)clearTimeout(autoRefreshTimer);
+ nextRefreshAt=Date.now()+refreshInterval;
+ autoRefreshTimer=setTimeout(refreshAdmin,refreshInterval);
+ updateRefreshCountdown();
+}
+function updateRefreshCountdown(){
+ const countdown=$('#nextRefresh');
+ if(!countdown||!nextRefreshAt)return;
+ const remaining=Math.max(0,Math.ceil((nextRefreshAt-Date.now())/1000));
+ const minutes=String(Math.floor(remaining/60)).padStart(2,'0');
+ const seconds=String(remaining%60).padStart(2,'0');
+ countdown.textContent=`Next refresh in ${minutes}:${seconds}`;
 }
 async function refreshAdmin(){
  if(refreshInProgress)return;
@@ -129,19 +145,26 @@ async function refreshAdmin(){
   refreshInProgress=false;
   const currentButton=$('#rf');
   if(currentButton){currentButton.disabled=false;currentButton.textContent='↻ Refresh'}
+  scheduleNextRefresh();
  }
 }
 function adminView(){
  const tabs=[['an','Report'],['ov','Overview'],['rq','All Requests'],['hb','Cities & Hubs']];
  app.innerHTML=`<div class="tabs">${tabs.map(([k,n])=>`<button class="${S.tab===k?'on':''}" data-k="${k}">${n}</button>`).join('')}
  <span id="refreshStatus" class="refresh-status" role="status" aria-live="polite"></span>
- <button class="o" id="rf" title="Automatically refreshes every 10 minutes" style="margin-left:auto">↻ Refresh</button></div><div id="pane"></div>`;
+ <span id="nextRefresh" class="refresh-countdown" role="timer" aria-live="off"></span>
+ <button class="o" id="rf" title="Automatically refreshes every 10 minutes">↻ Refresh</button></div><div id="pane"></div>`;
  app.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{S.tab=b.dataset.k;adminView()});
  $('#rf').onclick=refreshAdmin;
- $('#refreshStatus').textContent='Auto refresh every 10 minutes';
+ updateRefreshCountdown();
  ({ov:overview,an:analysis,rq:requests,hb:hubsPane})[S.tab]();
 }
 function tally(keyFn,data=S.data){const m={};data.forEach(r=>{const k=keyFn(r),id=k.join('|');(m[id]=m[id]||{k,n:{},tot:0});m[id].n[r.t]=(m[id].n[r.t]||0)+1;m[id].tot++});return Object.values(m)}
+function grandTotalRow(rows,labelColumns=1){
+ const totals=TYPES.map(t=>rows.reduce((sum,row)=>sum+(row.n[t]||0),0));
+ const total=totals.reduce((sum,value)=>sum+value,0);
+ return `<tfoot><tr class="grand-total"><th colspan="${labelColumns}">Grand Total</th>${totals.map(value=>`<td>${value}</td>`).join('')}<td>${total}</td></tr></tfoot>`;
+}
 function analysisRange(){
  const date=today();
  if(S.analysis==='yesterday'){const d=dateOffset(-1);return {start:d,end:d,label:'D-1 · '+d}}
@@ -162,11 +185,14 @@ function overview(){
  ${TYPES.map(t=>`<div class="stat"><b>${cnt(t)}</b><span>${t}</span></div>`).join('')}</div>
  <section class="card table-card"><div class="dash-heading"><div><h3>City-wise requests received</h3><p>Request volume grouped by city and request type</p></div></div>
  <div class="tw"><table><thead><tr><th>City</th>${th}<th>Total</th></tr></thead><tbody>
- ${city.map(r=>`<tr><td class="city-cell">${esc(r.k[0])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="6">No requests yet</td></tr>'}</tbody></table></div></section>
+ ${city.map(r=>`<tr><td class="city-cell">${esc(r.k[0])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="6">No requests yet</td></tr>'}</tbody>${grandTotalRow(city)}</table></div></section>
  <section class="card table-card"><div class="dash-heading"><div><h3>Store-wise requests received</h3><p>Request volume grouped by store location</p></div>
  <label class="city-filter" for="storeCity">City<select id="storeCity"><option value="">All cities</option>${storeCityOptions.map(c=>`<option value="${esc(c)}" ${S.storeCity===c?'selected':''}>${esc(c)}</option>`).join('')}</select></label></div>
  <div class="tw"><table><thead><tr><th>City</th><th>Store</th>${th}<th>Total</th></tr></thead><tbody id="storeTableBody"></tbody></table></div></section>`;
- const renderStoreTable=()=>{$('#storeTableBody').innerHTML=renderStoreRows().map(r=>`<tr><td>${esc(r.k[0])}</td><td class="city-cell">${esc(r.k[1])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="7">No requests for this city</td></tr>'};
+ const renderStoreTable=()=>{
+  const rows=renderStoreRows();
+  $('#storeTableBody').innerHTML=(rows.map(r=>`<tr><td>${esc(r.k[0])}</td><td class="city-cell">${esc(r.k[1])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="7">No requests for this city</td></tr>')+grandTotalRow(rows,2);
+ };
  $('#storeCity').onchange=e=>{S.storeCity=e.target.value;renderStoreTable()};
  renderStoreTable();
 }
@@ -200,7 +226,7 @@ function analysis(){
  <section class="chart-card"><h3>Requests by city</h3><p>${cities.length>8?'Top 8 cities by request volume':'Request volume by city'}</p><div class="chart-rows">${chartRows(shownCities)}</div></section></div>
  <section class="analysis-breakdown"><div class="dash-heading"><div><h3>City breakdown</h3><p>Requests by city and request type</p></div></div>
  <div class="tw"><table><thead><tr><th>City</th>${th}<th>Total</th></tr></thead><tbody>
- ${analysisCity.map(r=>`<tr><td class="city-cell">${esc(r.k[0])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="6">No requests for this period</td></tr>'}</tbody></table></div></section></section>`;
+ ${analysisCity.map(r=>`<tr><td class="city-cell">${esc(r.k[0])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="6">No requests for this period</td></tr>'}</tbody>${grandTotalRow(analysisCity)}</table></div></section></section>`;
  $('#pane').querySelectorAll('[data-period]').forEach(b=>b.onclick=()=>{S.analysis=b.dataset.period;analysis()});
  if(S.analysis==='custom'){
   $('#analysisStart').onchange=e=>{S.customStart=e.target.value;analysis()};

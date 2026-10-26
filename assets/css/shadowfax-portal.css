@@ -363,6 +363,22 @@ button:disabled {
 .refresh-status:not(:empty) {
   margin-left: auto;
 }
+.refresh-countdown {
+  color: var(--m);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.grand-total th,.grand-total td {
+  background: #edf5f1;
+  border-top: 2px solid var(--g);
+  color: var(--gd);
+  font-weight: 800;
+}
+.grand-total th {
+  position: static;
+  text-transform: none;
+}
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit,minmax(190px,1fr));

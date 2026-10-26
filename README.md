@@ -32,8 +32,9 @@ GT_Request/
 - View all-time request totals and city/store summaries in the administrator
   overview. The Report tab appears first and shows Today, D-1, last 1 week, or
   a custom date range, with request totals, city breakdowns, and charts by
-  request type and city. Administrator data refreshes automatically every
-  10 minutes.
+  request type and city. City and store breakdown tables include grand totals
+  for every request type. Administrator data refreshes automatically every
+  10 minutes, with a countdown beside the manual refresh button.
 - Filter the store-wise request summary by city.
 - Filter and search requests, delete requests, and add cities or hubs.
 
