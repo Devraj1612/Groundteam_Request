@@ -35,10 +35,11 @@ const mergeHubs=remote=>{
  });
  return hubs;
 };
-const S={u:'',p:'',role:'',hubs:{},data:[],tab:'ov',analysis:'today',storeCity:'',f:{t:'',c:'',q:''}};
 const dateString=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const today=()=>dateString(new Date());
 const dateOffset=days=>{const d=new Date();d.setDate(d.getDate()+days);return dateString(d)};
+const S={u:'',p:'',role:'',hubs:{},data:[],tab:'an',analysis:'today',customStart:dateOffset(-6),customEnd:today(),storeCity:'',f:{t:'',c:'',q:''}};
+let autoRefreshTimer=null,refreshInProgress=false;
 const msg=e=>esc((e&&e.message||String(e)).replace(/^Error:\s*/,''));
 
 function loginView(){
@@ -56,7 +57,8 @@ function loginView(){
    if(!r){$('#e').textContent='Invalid ID or password';b.disabled=false;return}
    Object.assign(S,{u,p,role:r});S.hubs=mergeHubs(await api('getHubs',u,p));
    $('#hr').innerHTML=`<span>${r==='admin'?'Admin · Control Tower':r==='viewer'?'Admin · View only':'Ground Team'}</span><button class="o" onclick="location.reload()">Logout</button>`;
-   r==='admin'||r==='viewer'?await adminLoad():userView();
+   if(r==='admin'||r==='viewer'){await adminLoad();startAutoRefresh()}
+   else userView();
   }catch(x){$('#e').innerHTML=msg(x);b.disabled=false}};
  $('#go').onclick=go;$('#p').onkeydown=e=>{if(e.key==='Enter')go()};
 }
@@ -68,60 +70,75 @@ function userView(note){
  app.querySelectorAll('.type').forEach(b=>b.onclick=()=>formView(b.dataset.t));
 }
 function formView(t){
- const bulk=t==='Bulk Order',photoRequired=bulk||t==='Manual Mark Deliver'||t==='Manual Mark Undelivered',cities=Object.keys(S.hubs).sort();
- app.innerHTML=`<div class="card"><h2>${t}</h2><div class="grid">
- <div><label>Date</label><input id="date" type="date" value="${today()}"></div>
- <div><label>City Name</label><select id="city"><option value="">Select city</option>${cities.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>
- ${bulk?'':'<div><label>TL Name</label><input id="tl"></div>'}
- <div><label>Store name</label><select id="store"><option value="">Select city first</option></select></div>
- <div><label>Order ID</label><input id="oid"></div>
- ${bulk?`<div><label>Secondary rider ID</label><input id="rider"></div>
- <div><label>No. of Bags quantity</label><input id="bags" type="number" min="1"></div>`
- :`<div><label>Request</label><input value="${t}" readonly></div>`}
+ const bulk=t==='Bulk Order',cities=Object.keys(S.hubs).sort();
+ app.innerHTML=`<div class="card"><h2>${t}</h2><form id="requestForm"><div class="grid">
+ <div><label for="date">Date*</label><input id="date" type="date" value="${today()}" required></div>
+ <div><label for="city">City Name*</label><select id="city" required><option value="">Select city</option>${cities.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>
+ <div><label for="tl">TL Name*</label><input id="tl" required></div>
+ <div><label for="store">Store name*</label><select id="store" required><option value="">Select city first</option></select></div>
+ <div><label for="oid">Order ID*</label><input id="oid" required></div>
+ <div><label for="request">Request*</label><input id="request" value="${esc(t)}" readonly required></div>
  </div>
- ${bulk?'':'<label>Reason</label><textarea id="reason" rows="3"></textarea>'}
- <label for="file">Photo attachment${photoRequired?' (required)':' (optional)'}</label><input id="file" type="file" accept="image/*" ${photoRequired?'required':''}>
+ <label for="reason">Reason*</label><textarea id="reason" rows="3" required></textarea>
+ ${bulk?'<label for="rider">Secondary rider ID*</label><input id="rider" required><label for="bags">No. of Bags quantity*</label><input id="bags" type="number" min="1" required>':''}
+ <label for="file">Proof attachment* (audio, photo or video)</label><input id="file" type="file" accept="image/*,audio/*,video/*" required>
  <div class="err" id="e"></div>
- <div style="display:flex;gap:10px;margin-top:10px"><button id="sub">Submit</button><button class="o" id="bk">Back</button></div></div>`;
+ <div style="display:flex;gap:10px;margin-top:10px"><button id="sub" type="submit">Submit</button><button class="o" id="bk" type="button">Back</button></div></form></div>`;
  $('#bk').onclick=()=>userView();
  $('#city').onchange=e=>{const h=(S.hubs[e.target.value]||[]).slice().sort();
   $('#store').innerHTML='<option value="">Select store</option>'+h.map(x=>`<option>${esc(x)}</option>`).join('')};
- $('#sub').onclick=async()=>{
+ $('#requestForm').onsubmit=async event=>{
+  event.preventDefault();
   const v=id=>($('#'+id)?$('#'+id).value.trim():''),err=$('#e');err.textContent='';
   const d={date:v('date'),city:v('city'),store:v('store'),orderId:v('oid'),tl:v('tl'),reason:v('reason'),rider:v('rider'),bags:v('bags')};
-  const need=bulk?['date','city','store','orderId','rider','bags']:['date','city','tl','store','orderId','reason'];
+  const need=bulk?['date','city','tl','store','orderId','reason','rider','bags']:['date','city','tl','store','orderId','reason'];
   if(need.some(k=>!d[k]))return err.textContent='Please fill all required fields';
   const f=$('#file').files[0];
-  if(photoRequired&&!f)return err.textContent='Photo attachment is required';
-  if(f&&f.size>8e6)return err.textContent='Photo must be under 8 MB';
+  if(!f)return err.textContent='Proof attachment is required';
+  if(f.type&&!/^(image|audio|video)\//.test(f.type))return err.textContent='Proof attachment must be an audio, photo or video file';
+  if(f.size>8e6)return err.textContent='Proof attachment must be under 8 MB';
   const b=$('#sub');b.disabled=true;b.textContent='Submitting…';
   try{let file=null;
-   if(f)file=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok({name:f.name,mime:f.type||'image/jpeg',data:r.result.split(',')[1]});r.onerror=no;r.readAsDataURL(f)});
+   if(f)file=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok({name:f.name,mime:f.type||'application/octet-stream',data:r.result.split(',')[1]});r.onerror=no;r.readAsDataURL(f)});
    await api('submitRequest',S.u,S.p,t,d,file);userView(`✓ ${esc(t)} request submitted for Order ${esc(d.orderId)}`);
   }catch(x){err.innerHTML=msg(x);b.disabled=false;b.textContent='Submit'}};
 }
 
 /* ---------- Admin ---------- */
 async function adminLoad(){S.data=await api('adminData',S.u,S.p);adminView()}
+function startAutoRefresh(){
+ if(autoRefreshTimer)clearInterval(autoRefreshTimer);
+ autoRefreshTimer=setInterval(refreshAdmin,10*60*1000);
+}
+async function refreshAdmin(){
+ if(refreshInProgress)return;
+ refreshInProgress=true;
+ const button=$('#rf');
+ if(button){button.disabled=true;button.textContent='Refreshing…'}
+ try{
+  const data=await api('adminData',S.u,S.p);
+  const hubs=S.tab==='hb'?mergeHubs(await api('getHubs',S.u,S.p)):null;
+  S.data=data;
+  if(hubs)S.hubs=hubs;
+  adminView();
+  $('#refreshStatus').textContent=`Last refreshed at ${new Date().toLocaleTimeString()}`;
+ }catch(x){
+  const currentStatus=$('#refreshStatus');
+  if(currentStatus)currentStatus.textContent='Refresh failed: '+msg(x);
+ }finally{
+  refreshInProgress=false;
+  const currentButton=$('#rf');
+  if(currentButton){currentButton.disabled=false;currentButton.textContent='↻ Refresh'}
+ }
+}
 function adminView(){
- const tabs=[['ov','Overview'],['an','Report'],['rq','All Requests'],['hb','Cities & Hubs']];
+ const tabs=[['an','Report'],['ov','Overview'],['rq','All Requests'],['hb','Cities & Hubs']];
  app.innerHTML=`<div class="tabs">${tabs.map(([k,n])=>`<button class="${S.tab===k?'on':''}" data-k="${k}">${n}</button>`).join('')}
  <span id="refreshStatus" class="refresh-status" role="status" aria-live="polite"></span>
- <button class="o" id="rf" style="margin-left:auto">↻ Refresh</button></div><div id="pane"></div>`;
+ <button class="o" id="rf" title="Automatically refreshes every 10 minutes" style="margin-left:auto">↻ Refresh</button></div><div id="pane"></div>`;
  app.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{S.tab=b.dataset.k;adminView()});
- $('#rf').onclick=async()=>{
-  const b=$('#rf'),status=$('#refreshStatus');
-  b.disabled=true;b.textContent='Refreshing…';status.textContent='';
-  try{
-   const data=await api('adminData',S.u,S.p);
-   if(S.tab==='hb')S.hubs=mergeHubs(await api('getHubs',S.u,S.p));
-   S.data=data;adminView();
-   $('#refreshStatus').textContent='Updated just now';
-  }catch(x){
-   b.disabled=false;b.textContent='↻ Refresh';
-   status.textContent='Refresh failed: '+msg(x);
-  }
- };
+ $('#rf').onclick=refreshAdmin;
+ $('#refreshStatus').textContent='Auto refresh every 10 minutes';
  ({ov:overview,an:analysis,rq:requests,hb:hubsPane})[S.tab]();
 }
 function tally(keyFn,data=S.data){const m={};data.forEach(r=>{const k=keyFn(r),id=k.join('|');(m[id]=m[id]||{k,n:{},tot:0});m[id].n[r.t]=(m[id].n[r.t]||0)+1;m[id].tot++});return Object.values(m)}
@@ -129,11 +146,10 @@ function analysisRange(){
  const date=today();
  if(S.analysis==='yesterday'){const d=dateOffset(-1);return {start:d,end:d,label:'D-1 · '+d}}
  if(S.analysis==='week'){
-  const now=new Date(),mondayOffset=now.getDay()===0?-6:1-now.getDay();
-  now.setDate(now.getDate()+mondayOffset);
-  const start=dateString(now);
-  return {start,end:date,label:'This week · '+start+' to '+date}
+  const start=dateOffset(-6);
+  return {start,end:date,label:`Last 1 week · ${start} to ${date}`}
  }
+ if(S.analysis==='custom')return {start:S.customStart,end:S.customEnd,label:`Custom range · ${S.customStart} to ${S.customEnd}`};
  return {start:date,end:date,label:'Current day · '+date}
 }
 function overview(){
@@ -156,7 +172,8 @@ function overview(){
 }
 function analysis(){
  const {start,end,label}=analysisRange();
- const periodData=S.data.filter(r=>r.date>=start&&r.date<=end);
+ const validRange=Boolean(start&&end&&start<=end);
+ const periodData=validRange?S.data.filter(r=>r.date>=start&&r.date<=end):[];
  const typeCounts=TYPES.map(t=>({label:t,value:periodData.filter(r=>r.t===t).length}));
  const cities=tally(r=>[r.city],periodData).filter(r=>r.k[0]).sort((a,b)=>b.tot-a.tot);
  const shownCities=cities.slice(0,8).map(r=>({label:r.k[0],value:r.tot}));
@@ -171,7 +188,12 @@ function analysis(){
  const analysisTypes=typeCounts.map(({label,value})=>`<div class="analysis-type"><b>${value}</b><span>${esc(label)}</span></div>`).join('');
  $('#pane').innerHTML=`<section class="card analysis-card"><div class="dash-heading"><div><span class="section-kicker">REQUEST TRENDS</span><h2>Analysis</h2><p>${esc(label)} · all request types</p></div>
  <div class="period-switch" role="group" aria-label="Analysis period">
- ${[['today','Today'],['yesterday','D-1'],['week','This week']].map(([k,n])=>`<button class="${S.analysis===k?'on':''}" data-period="${k}">${n}</button>`).join('')}</div></div>
+ ${[['today','Today'],['yesterday','D-1'],['week','Last 1 week'],['custom','Custom dates']].map(([k,n])=>`<button type="button" class="${S.analysis===k?'on':''}" data-period="${k}">${n}</button>`).join('')}</div></div>
+ <div class="date-range" ${S.analysis==='custom'?'':'hidden'}>
+ <label for="analysisStart">From<input id="analysisStart" type="date" value="${esc(S.customStart)}" required></label>
+ <label for="analysisEnd">To<input id="analysisEnd" type="date" value="${esc(S.customEnd)}" required></label>
+ </div>
+ ${validRange?'':'<p class="err" role="alert">Select both dates and make sure the start date is on or before the end date.</p>'}
  <div class="analysis-summary"><div class="analysis-total"><b>${periodData.length}</b><span>Requests in period</span></div><div class="analysis-types">${analysisTypes}</div></div>
  <div class="chart-grid">
  <section class="chart-card"><h3>Requests by type</h3><p>Volume for each request type in the selected period</p><div class="chart-rows">${chartRows(typeCounts)}</div></section>
@@ -180,6 +202,10 @@ function analysis(){
  <div class="tw"><table><thead><tr><th>City</th>${th}<th>Total</th></tr></thead><tbody>
  ${analysisCity.map(r=>`<tr><td class="city-cell">${esc(r.k[0])}</td>${cells(r)}<td class="total-cell">${r.tot}</td></tr>`).join('')||'<tr><td class="table-empty" colspan="6">No requests for this period</td></tr>'}</tbody></table></div></section></section>`;
  $('#pane').querySelectorAll('[data-period]').forEach(b=>b.onclick=()=>{S.analysis=b.dataset.period;analysis()});
+ if(S.analysis==='custom'){
+  $('#analysisStart').onchange=e=>{S.customStart=e.target.value;analysis()};
+  $('#analysisEnd').onchange=e=>{S.customEnd=e.target.value;analysis()};
+ }
 }
 function requests(){
  const cities=[...new Set(S.data.map(r=>r.city))].sort();
@@ -189,7 +215,7 @@ function requests(){
  <input id="fq" placeholder="Search order ID / store / TL" value="${esc(S.f.q)}"></div><div class="tw" id="tb"></div></div>`;
  const draw=()=>{const q=S.f.q.toLowerCase();
   const rows=S.data.filter(r=>(!S.f.t||r.t===S.f.t)&&(!S.f.c||r.city===S.f.c)&&(!q||[r.orderId,r.store,r.tl,r.rider].join(' ').toLowerCase().includes(q))).reverse();
-  $('#tb').innerHTML=`<p class="mut">${rows.length} request(s)</p><table><tr><th>Type</th><th>Date</th><th>City</th><th>TL</th><th>Store</th><th>Order ID</th><th>Reason / Rider · Bags</th><th>Photo</th>${S.role==='admin'?'<th></th>':''}</tr>
+  $('#tb').innerHTML=`<p class="mut">${rows.length} request(s)</p><table><tr><th>Type</th><th>Date</th><th>City</th><th>TL</th><th>Store</th><th>Order ID</th><th>Reason / Rider · Bags</th><th>Proof</th>${S.role==='admin'?'<th></th>':''}</tr>
   ${rows.map((r,i)=>`<tr><td>${r.t}</td><td>${esc(r.date)}</td><td>${esc(r.city)}</td><td>${esc(r.tl||'-')}</td><td>${esc(r.store)}</td><td>${esc(r.orderId)}</td>
   <td>${r.t==='Bulk Order'?esc(r.rider)+' · '+esc(r.bags)+' bags':esc(r.reason)}</td>
   <td>${r.photo?`<a href="${esc(r.photo)}" target="_blank" rel="noopener">View</a>`:'-'}</td>${S.role==='admin'?`<td><button class="d" data-i="${S.data.indexOf(r)}">Delete</button></td>`:''}</tr>`).join('')}</table>`;

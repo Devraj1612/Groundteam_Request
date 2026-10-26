@@ -561,11 +561,30 @@ tbody tr:last-child td {
 }
 .period-switch {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 4px;
   border: 1px solid var(--b);
   border-radius: 10px;
   background: #f4f8f6;
   padding: 4px;
+}
+.date-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+}
+.date-range[hidden] {
+  display: none;
+}
+.date-range label {
+  min-width: 180px;
+  margin: 0;
+}
+.date-range input {
+  margin-top: 5px;
 }
 .period-switch button {
   border-radius: 7px;
