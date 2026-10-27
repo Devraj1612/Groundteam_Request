@@ -92,7 +92,7 @@ function formView(t){
  app.innerHTML=`<div class="card"><h2>${t}</h2><form id="requestForm"><div class="grid">
  <div><label for="date">Date*</label><input id="date" type="date" value="${today()}" required></div>
  <div><label for="city">City Name*</label><select id="city" required><option value="">Select city</option>${cities.map(c=>`<option>${esc(c)}</option>`).join('')}</select></div>
- <div><label for="tl">TL Name*</label><input id="tl" required></div>
+ <div><label for="tl">TL Name*</label><input id="tl" name="tl" autocomplete="name" placeholder="Enter TL name" required aria-required="true"></div>
  <div><label for="store">Store name*</label><select id="store" required><option value="">Select city first</option></select></div>
  <div><label for="oid">Order ID*</label><input id="oid" required></div>
  <div><label for="request">Request*</label><input id="request" value="${esc(t)}" readonly required></div>
@@ -110,6 +110,7 @@ function formView(t){
   const v=id=>($('#'+id)?$('#'+id).value.trim():''),err=$('#e');err.textContent='';
   const d={date:v('date'),city:v('city'),store:v('store'),orderId:v('oid'),tl:v('tl'),reason:v('reason'),rider:v('rider'),bags:v('bags')};
   const need=bulk?['date','city','tl','store','orderId','reason','rider','bags']:['date','city','tl','store','orderId','reason'];
+  if(!d.tl)return err.textContent='TL Name is required';
   if(need.some(k=>!d[k]))return err.textContent='Please fill all required fields';
   const f=$('#file').files[0];
   if(!f)return err.textContent='Proof attachment is required';
