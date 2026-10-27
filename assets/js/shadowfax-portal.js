@@ -44,7 +44,18 @@ const mergeHubs=remote=>{
 const dateString=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const today=()=>dateString(new Date());
 const dateOffset=days=>{const d=new Date();d.setDate(d.getDate()+days);return dateString(d)};
-const S={u:'',p:'',role:'',hubs:{},data:[],tab:'an',analysis:'today',customStart:dateOffset(-6),customEnd:today(),storeCity:'',f:{t:'',c:'',q:''}};
+const requestDateValue=value=>{
+ const match=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+ if(match)return Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]));
+ const parsed=Date.parse(value);
+ return Number.isNaN(parsed)?0:parsed;
+};
+const formatRequestDate=value=>{
+ const match=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+ const date=match?new Date(Number(match[1]),Number(match[2])-1,Number(match[3])):new Date(value);
+ return Number.isNaN(date.getTime())?String(value||'-'):new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'short',year:'numeric'}).format(date);
+};
+const S={u:'',p:'',role:'',hubs:{},data:[],tab:'an',analysis:'today',customStart:dateOffset(-6),customEnd:today(),storeCity:'',f:{t:'',c:'',q:'',page:1}};
 let autoRefreshTimer=null,countdownTimer=null,nextRefreshAt=0,refreshInProgress=false;
 const refreshInterval=10*60*1000;
 const msg=e=>esc((e&&e.message||String(e)).replace(/^Error:\s*/,''));
@@ -244,18 +255,28 @@ function requests(){
  $('#pane').innerHTML=`<div class="card"><h3>All requests</h3><div class="bar">
  <select id="ft"><option value="">All request types</option>${TYPES.map(t=>`<option ${S.f.t===t?'selected':''}>${t}</option>`).join('')}</select>
  <select id="fc"><option value="">All cities</option>${cities.map(c=>`<option ${S.f.c===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
- <input id="fq" placeholder="Search order ID / store / TL" value="${esc(S.f.q)}"></div><div class="tw" id="tb"></div></div>`;
+ <input id="fq" placeholder="Search order ID / store / TL" value="${esc(S.f.q)}"></div><div id="tb"></div></div>`;
  const draw=()=>{const q=S.f.q.toLowerCase();
-  const rows=S.data.filter(r=>(!S.f.t||r.t===S.f.t)&&(!S.f.c||r.city===S.f.c)&&(!q||[r.orderId,r.store,r.tl,r.rider].join(' ').toLowerCase().includes(q))).reverse();
-  $('#tb').innerHTML=`<p class="mut">${rows.length} request(s)</p><table><tr><th>Type</th><th>Date</th><th>City</th><th>TL</th><th>Store</th><th>Order ID</th><th>Reason / Rider · Bags</th><th>Proof</th>${S.role==='admin'?'<th></th>':''}</tr>
-  ${rows.map((r,i)=>`<tr><td>${r.t}</td><td>${esc(r.date)}</td><td>${esc(r.city)}</td><td>${esc(r.tl||'-')}</td><td>${esc(r.store)}</td><td>${esc(r.orderId)}</td>
+  const rows=S.data.map((r,index)=>({r,index})).filter(({r})=>(!S.f.t||r.t===S.f.t)&&(!S.f.c||r.city===S.f.c)&&(!q||[r.orderId,r.store,r.tl,r.rider].join(' ').toLowerCase().includes(q)))
+   .sort((a,b)=>requestDateValue(b.r.date)-requestDateValue(a.r.date)||b.index-a.index).map(({r})=>r);
+  const pageSize=30,pageCount=Math.max(1,Math.ceil(rows.length/pageSize));
+  S.f.page=Math.min(S.f.page,pageCount);
+  const start=rows.length?(S.f.page-1)*pageSize+1:0,end=Math.min(S.f.page*pageSize,rows.length);
+  const visibleRows=rows.slice((S.f.page-1)*pageSize,S.f.page*pageSize);
+  const columnCount=8+(S.role==='admin'?1:0);
+  $('#tb').innerHTML=`<p class="mut">${rows.length} request(s)</p><div class="tw"><table class="requests-table"><thead><tr><th>Type</th><th>Date</th><th>City</th><th>TL</th><th>Store</th><th>Order ID</th><th>Reason / Rider · Bags</th><th>Proof</th>${S.role==='admin'?'<th></th>':''}</tr></thead><tbody>
+  ${visibleRows.map(r=>`<tr><td>${esc(r.t)}</td><td class="request-date">${esc(formatRequestDate(r.date))}</td><td>${esc(r.city)}</td><td>${esc(r.tl||'-')}</td><td>${esc(r.store)}</td><td>${esc(r.orderId)}</td>
   <td>${r.t==='Bulk Order'?esc(r.rider)+' · '+esc(r.bags)+' bags':esc(r.reason)}</td>
-  <td>${r.photo?`<a href="${esc(r.photo)}" target="_blank" rel="noopener">View</a>`:'-'}</td>${S.role==='admin'?`<td><button class="d" data-i="${S.data.indexOf(r)}">Delete</button></td>`:''}</tr>`).join('')}</table>`;
+  <td>${r.photo?`<a href="${esc(r.photo)}" target="_blank" rel="noopener">View</a>`:'-'}</td>${S.role==='admin'?`<td><button class="d" data-i="${S.data.indexOf(r)}">Delete</button></td>`:''}</tr>`).join('')||`<tr><td class="table-empty" colspan="${columnCount}">No requests found</td></tr>`}</tbody></table></div>
+  <div class="request-pagination" aria-label="Request pages"><span>Showing ${start}-${end} of ${rows.length} · Page ${S.f.page} of ${pageCount} · 30 per page</span>
+  <div><button type="button" class="page-prev" ${S.f.page===1?'disabled':''}>Previous</button><button type="button" class="page-next" ${S.f.page===pageCount?'disabled':''}>Next</button></div></div>`;
+  $('#tb').querySelector('.page-prev').onclick=()=>{if(S.f.page>1){S.f.page--;draw()}};
+  $('#tb').querySelector('.page-next').onclick=()=>{if(S.f.page<pageCount){S.f.page++;draw()}};
   $('#tb').querySelectorAll('.d').forEach(b=>b.onclick=async()=>{const r=S.data[b.dataset.i];
    if(!confirm(`Delete ${r.t} request for Order ${r.orderId}? This also removes the row from the sheet.`))return;
    b.disabled=true;try{await api('deleteRequest',S.u,S.p,r.t,r.row,r.orderId);await adminLoad()}catch(x){alert(msg(x));b.disabled=false}})};
- $('#ft').onchange=e=>{S.f.t=e.target.value;draw()};$('#fc').onchange=e=>{S.f.c=e.target.value;draw()};
- $('#fq').oninput=e=>{S.f.q=e.target.value;draw()};draw();
+ $('#ft').onchange=e=>{S.f.t=e.target.value;S.f.page=1;draw()};$('#fc').onchange=e=>{S.f.c=e.target.value;S.f.page=1;draw()};
+ $('#fq').oninput=e=>{S.f.q=e.target.value;S.f.page=1;draw()};draw();
 }
 function hubsPane(){
  const cities=Object.keys(S.hubs).sort();

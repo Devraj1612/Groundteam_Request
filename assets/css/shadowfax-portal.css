@@ -764,6 +764,30 @@ a {
   color: var(--m);
   font-size: 13px;
 }
+.requests-table {
+  min-width: 1050px;
+}
+.request-date {
+  white-space: nowrap;
+}
+.request-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--b);
+  color: var(--m);
+  font-size: 13px;
+}
+.request-pagination>div {
+  display: flex;
+  gap: 8px;
+}
+.request-pagination button {
+  padding: 7px 12px;
+}
 @media(max-width:760px) {
   main {
     padding: 18px 14px;
@@ -828,5 +852,9 @@ a {
   }
   .card {
     padding: 18px;
+  }
+  .request-pagination {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
