@@ -9,7 +9,7 @@ const watermark=logo.cloneNode();
 watermark.className='watermark';watermark.alt='';watermark.setAttribute('aria-hidden','true');document.body.append(watermark);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* >>> PASTE your Apps Script Web App URL (ends with /exec) between the quotes <<< */
-const API_URL='https://script.google.com/macros/s/AKfycbxks8iyXGEflkpHSEm3O1y1Pw3voBX-T_vPArknwGBLaxKbJjqMSz7kK5vaaT0noq-eXA/exec';
+const API_URL='https://script.google.com/macros/s/AKfycbxsMIgVpgHMNOif8RhPos4d29HmUwRu8vf5m2-ncxtqW9pXYDCdhUOzfCQauUoEdmTs8g/exec';
 const api=async(fn,...a)=>{
  if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(API_URL))throw new Error('API_URL is not set in this HTML file');
  const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fn,args:a})});
